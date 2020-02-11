@@ -1,0 +1,156 @@
+<?php
+/**
+ * @file
+ * A block module that displays new users.
+ */
+
+function moesk_new_users_help($path, $arg) {
+	switch ($path) {
+    		case "admin/help#moesk_new_users":
+			return '<p>' . t("Displays links to recently created users") . '</p>';
+			break;
+		}
+}
+
+
+/**
+ * Implements hook_block_info().
+ */
+function moesk_new_users_block_info() {
+	$blocks['moesk_new_users'] = array(
+		'info' => t('Moesk new users'),
+		'cache' => DRUPAL_CACHE_PER_ROLE,
+		);
+	return $blocks;
+}
+
+
+/**
+ * Custom content function. 
+ * 
+ * Get the most recently created active users
+ * 
+ * @return 
+ *   A result set of the users by uid desc order.
+ */
+function moesk_new_users_contents(){
+	$query = new EntityFieldQuery();
+	$query->entityCondition('entity_type', 'user')
+		->propertyCondition('status', 1)
+		->propertyOrderBy('created', 'DESC')
+		->range(0,variable_get('moesk_new_users_max', 5));
+	return $query->execute();
+}
+
+
+/**
+ * Implements hook_block_view().
+ */
+function moesk_new_users_block_view($delta = '') {
+	switch ($delta) {
+		case 'moesk_new_users':
+			$block['subject'] =  variable_get('moesk_new_users_block_header', 'Новые сотрудники');
+			if (user_access('access user profiles')) {
+				$result = moesk_new_users_contents();
+				if (isset($result['user'])) {
+					$NEW_USERS_ROW = "<div class=\"new-users-row\"> %s </div>";
+					$NEW_USERS_ROW_ICON = "<div class=\"new-users-icon\"><span class=\"glyphicon glyphicon-ok new-users-icon\" aria-hidden=\"true\"></span></div>";
+					$NEW_USERS_ROW_NAME = "<div class=\"new-users-name\"> %s </div>";
+					$NEW_USERS_ROW_TITLE = "<div class=\"new-users-title\"> %s </div>";
+
+					$block['content'] = t('set');  
+					$user_uids = array_keys($result['user']);
+					$user_items = entity_load('user', $user_uids);
+					$links = array();
+					foreach ($user_items as $user) {
+						if (empty($user->field_full_name['und'][0]['safe_value'])) continue;
+						$str = $user->field_full_name['und'][0]['safe_value'];
+						if ( ! variable_get('moesk_new_users_show_patronymic', False)) {
+							$pos = strrpos($str, ' ');
+							if ($pos>1) $str = substr($str, 0, $pos);
+						}
+						$data = "";
+						if (variable_get('moesk_new_users_show_icon', True)) {
+							$data .= $NEW_USERS_ROW_ICON;
+						}
+						$data .= sprintf($NEW_USERS_ROW_NAME, l($str, 'user/' . $user->uid));
+						if (variable_get('moesk_new_users_show_title', True) && !empty($user->field_title['und'][0]['safe_value'])) {
+							$data .= sprintf($NEW_USERS_ROW_TITLE, $user->field_title['und'][0]['safe_value']);
+						}
+						$links[] = array(
+							'data' => $data,
+							);
+					}
+				}
+   			}
+			if (empty($links)) {
+				$block['content'] = variable_get('moesk_new_users_block_empty', 'Новые сотрудники не найдены');  
+			}
+			else {
+				$block['content'] = theme('item_list', array(
+					'items' => $links)
+					);
+			}
+	}
+	return $block;
+}
+
+
+/**
+ * Implements hook_menu().
+ */
+function moesk_new_users_menu() {
+	$items = array();
+	$items['admin/config/people/current_posts'] = array(
+		'title' => 'Новые сотрудники МОЭСК',
+		'description' => 'Настройки модуля новых сотрудников МОЭСК',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('moesk_new_users_form'),
+		'access arguments' => array('access administration pages'),
+		'type' => MENU_NORMAL_ITEM,
+	);
+	return $items;
+}
+
+
+/**
+ * Page callback: Moesk new users
+ *
+ * @see current_posts_menu()
+ */
+function moesk_new_users_form($form, &$form_state) {
+	$form['moesk_new_users_block_header'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Заголовок блока'),
+		'#default_value' => variable_get('moesk_new_users_block_header', 'Новые сотрудники'),
+		'#size' => 64,
+		'#maxlength' => 64,
+		'#description' => t('Текст заголовка блока.'),
+		'#required' => TRUE,
+	);
+	$form['moesk_new_users_max'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Количество новых пользователей'),
+		'#default_value' => variable_get('moesk_new_users_max', 5),
+		'#size' => 2,
+		'#maxlength' => 2,
+		'#description' => t('Количество ссылок, отображаемых блоком.'),
+		'#required' => TRUE,
+	);
+	$form['moesk_new_users_show_icon'] = array(
+		'#type' => 'checkbox',
+		'#title' => t('Отображать иконку'),
+		'#default_value' => variable_get('moesk_new_users_show_icon', True),
+	);
+	$form['moesk_new_users_show_title'] = array(
+		'#type' => 'checkbox',
+		'#title' => t('Отображать должность'),
+		'#default_value' => variable_get('moesk_new_users_show_title', True),
+	);
+	$form['moesk_new_users_show_patronymic'] = array(
+		'#type' => 'checkbox',
+		'#title' => t('Отображать отчество'),
+		'#default_value' => variable_get('moesk_new_users_show_patronymic', False),
+	);
+	return system_settings_form($form);
+}

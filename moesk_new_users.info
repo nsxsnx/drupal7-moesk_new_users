@@ -1,0 +1,5 @@
+name = New Users
+description = A block module that lists new users
+core = 7.x
+package = Moesk
+configure = admin/config/people/current_posts
